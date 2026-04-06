@@ -1,26 +1,24 @@
 import java.util.*;
 
-// -------------------- Custom Exception (NEW) --------------------
+// -------------------- Custom Exception --------------------
 class InvalidBookingException extends Exception {
     public InvalidBookingException(String message) {
         super(message);
     }
 }
 
-// -------------------- Validator Class (NEW) --------------------
+// -------------------- Validator Class --------------------
 class InvalidBookingValidator {
 
     private static final List<String> VALID_SERVICES =
             Arrays.asList("WiFi", "Food", "Spa", "Laundry");
 
-    // Validate reservation ID
     public void validateReservationId(String id) throws InvalidBookingException {
         if (id == null || id.trim().isEmpty()) {
             throw new InvalidBookingException("Reservation ID cannot be empty.");
         }
     }
 
-    // Validate service
     public void validateService(String name, double cost) throws InvalidBookingException {
 
         if (!VALID_SERVICES.contains(name)) {
@@ -111,6 +109,11 @@ class BookingHistory {
     public List<Reservation> getAllReservations() {
         return history;
     }
+
+    // Remove on cancellation
+    public boolean removeReservation(String reservationId) {
+        return history.removeIf(r -> r.getReservationId().equals(reservationId));
+    }
 }
 
 // -------------------- Booking Report Service --------------------
@@ -135,6 +138,52 @@ class BookingReportService {
     }
 }
 
+// -------------------- Cancellation Service (NEW) --------------------
+class CancellationService {
+
+    private Stack<String> rollbackStack = new Stack<>();
+
+    // Simulated inventory
+    private Map<String, Integer> inventory = new HashMap<>();
+
+    public CancellationService() {
+        inventory.put("Standard", 5);
+        inventory.put("Deluxe", 3);
+    }
+
+    public void cancelBooking(String reservationId, BookingHistory history)
+            throws InvalidBookingException {
+
+        // Validate existence
+        boolean exists = history.getAllReservations()
+                .stream()
+                .anyMatch(r -> r.getReservationId().equals(reservationId));
+
+        if (!exists) {
+            throw new InvalidBookingException("Reservation does not exist.");
+        }
+
+        // Push to stack (rollback tracking)
+        rollbackStack.push(reservationId);
+
+        // Restore inventory (simulated)
+        inventory.put("Standard", inventory.get("Standard") + 1);
+
+        // Remove from history
+        history.removeReservation(reservationId);
+
+        System.out.println("Cancellation successful for: " + reservationId);
+    }
+
+    public void showRollbackStack() {
+        System.out.println("Rollback Stack: " + rollbackStack);
+    }
+
+    public void showInventory() {
+        System.out.println("Updated Inventory: " + inventory);
+    }
+}
+
 // -------------------- Main Class --------------------
 public class BookMyStay {
 
@@ -146,35 +195,30 @@ public class BookMyStay {
         BookingHistory history = new BookingHistory();
         BookingReportService reportService = new BookingReportService();
         InvalidBookingValidator validator = new InvalidBookingValidator();
+        CancellationService cancellationService = new CancellationService();
 
         System.out.println("===== Book My Stay - Add-On Services =====");
 
         try {
-            // Reservation ID input
+            // Reservation ID
             System.out.print("Enter Reservation ID: ");
             String reservationId = sc.nextLine();
 
-            // ✅ Validate reservation
             validator.validateReservationId(reservationId);
 
-            // Add to history
             history.addReservation(new Reservation(reservationId));
 
             List<Service> selectedServices = new ArrayList<>();
 
-            // Number of services
             System.out.print("Enter number of add-on services: ");
             int n = sc.nextInt();
             sc.nextLine();
 
             if (n < 0) {
-                throw new InvalidBookingException("Number of services cannot be negative.");
+                throw new InvalidBookingException("Invalid number of services.");
             }
 
-            // Input services
             for (int i = 0; i < n; i++) {
-                System.out.println("\nService " + (i + 1));
-
                 System.out.print("Enter service name (WiFi/Food/Spa/Laundry): ");
                 String name = sc.nextLine();
 
@@ -182,44 +226,42 @@ public class BookMyStay {
                 double cost = sc.nextDouble();
                 sc.nextLine();
 
-                // ✅ Validate service
                 validator.validateService(name, cost);
 
                 selectedServices.add(new Service(name, cost));
             }
 
-            // Store services
             manager.addServices(reservationId, selectedServices);
 
-            // Display services
             System.out.println("\n===== Selected Services =====");
-            List<Service> services = manager.getServices(reservationId);
-
-            if (services.isEmpty()) {
-                System.out.println("No services selected.");
-            } else {
-                for (Service s : services) {
-                    System.out.println("- " + s);
-                }
+            for (Service s : manager.getServices(reservationId)) {
+                System.out.println("- " + s);
             }
 
-            // Total cost
             double total = manager.calculateTotalCost(reservationId);
             System.out.println("\nTotal Add-On Cost: Rs." + total);
 
+            // ---------------- CANCEL FLOW ----------------
+            System.out.print("\nDo you want to cancel this booking? (yes/no): ");
+            String choice = sc.nextLine();
+
+            if (choice.equalsIgnoreCase("yes")) {
+                cancellationService.cancelBooking(reservationId, history);
+                cancellationService.showRollbackStack();
+                cancellationService.showInventory();
+            }
+
         } catch (InvalidBookingException e) {
-            // ✅ Graceful failure
             System.out.println("Error: " + e.getMessage());
         } catch (Exception e) {
-            // Catch unexpected errors
             System.out.println("Unexpected error occurred.");
         }
 
-        // System continues safely
+        // Reports
         reportService.displayAllBookings(history.getAllReservations());
         reportService.generateSummary(history.getAllReservations());
 
-        System.out.println("\n(System remains stable after errors)");
+        System.out.println("\n(System remains stable after cancellation)");
 
         sc.close();
     }
