@@ -27,20 +27,16 @@ class Service {
 // -------------------- Add-On Service Manager --------------------
 class AddOnServiceManager {
 
-    // Map<ReservationID, List of Services>
     private Map<String, List<Service>> serviceMap = new HashMap<>();
 
-    // Add services to reservation
     public void addServices(String reservationId, List<Service> services) {
         serviceMap.put(reservationId, services);
     }
 
-    // Get services for reservation
     public List<Service> getServices(String reservationId) {
         return serviceMap.getOrDefault(reservationId, new ArrayList<>());
     }
 
-    // Calculate total cost
     public double calculateTotalCost(String reservationId) {
         double total = 0;
         List<Service> services = getServices(reservationId);
@@ -52,13 +48,70 @@ class AddOnServiceManager {
     }
 }
 
+// -------------------- Reservation Class (NEW) --------------------
+class Reservation {
+    private String reservationId;
+
+    public Reservation(String reservationId) {
+        this.reservationId = reservationId;
+    }
+
+    public String getReservationId() {
+        return reservationId;
+    }
+
+    @Override
+    public String toString() {
+        return "Reservation ID: " + reservationId;
+    }
+}
+
+// -------------------- Booking History (NEW) --------------------
+class BookingHistory {
+
+    private List<Reservation> history = new ArrayList<>();
+
+    public void addReservation(Reservation reservation) {
+        history.add(reservation);
+    }
+
+    public List<Reservation> getAllReservations() {
+        return history;
+    }
+}
+
+// -------------------- Booking Report Service (NEW) --------------------
+class BookingReportService {
+
+    public void displayAllBookings(List<Reservation> reservations) {
+        System.out.println("\n===== Booking History =====");
+
+        if (reservations.isEmpty()) {
+            System.out.println("No bookings found.");
+            return;
+        }
+
+        for (Reservation r : reservations) {
+            System.out.println(r);
+        }
+    }
+
+    public void generateSummary(List<Reservation> reservations) {
+        System.out.println("\n===== Booking Summary =====");
+        System.out.println("Total Bookings: " + reservations.size());
+    }
+}
+
 // -------------------- Main Class --------------------
 public class BookMyStay {
 
     public static void main(String[] args) {
 
         Scanner sc = new Scanner(System.in);
+
         AddOnServiceManager manager = new AddOnServiceManager();
+        BookingHistory history = new BookingHistory();
+        BookingReportService reportService = new BookingReportService();
 
         System.out.println("===== Book My Stay - Add-On Services =====");
 
@@ -66,12 +119,15 @@ public class BookMyStay {
         System.out.print("Enter Reservation ID: ");
         String reservationId = sc.nextLine();
 
+        // ✅ Add to booking history (NEW)
+        history.addReservation(new Reservation(reservationId));
+
         List<Service> selectedServices = new ArrayList<>();
 
         // Number of services
         System.out.print("Enter number of add-on services: ");
         int n = sc.nextInt();
-        sc.nextLine(); // consume newline
+        sc.nextLine();
 
         // Input services
         for (int i = 0; i < n; i++) {
@@ -82,7 +138,7 @@ public class BookMyStay {
 
             System.out.print("Enter service cost: ");
             double cost = sc.nextDouble();
-            sc.nextLine(); // consume newline
+            sc.nextLine();
 
             selectedServices.add(new Service(name, cost));
         }
@@ -105,6 +161,12 @@ public class BookMyStay {
         // Total cost
         double total = manager.calculateTotalCost(reservationId);
         System.out.println("\nTotal Add-On Cost: Rs." + total);
+
+        // ✅ Show booking history (NEW)
+        reportService.displayAllBookings(history.getAllReservations());
+
+        // ✅ Summary report (NEW)
+        reportService.generateSummary(history.getAllReservations());
 
         System.out.println("\n(Booking and room allocation remain unchanged)");
 
