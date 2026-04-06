@@ -1,5 +1,38 @@
 import java.util.*;
 
+// -------------------- Custom Exception (NEW) --------------------
+class InvalidBookingException extends Exception {
+    public InvalidBookingException(String message) {
+        super(message);
+    }
+}
+
+// -------------------- Validator Class (NEW) --------------------
+class InvalidBookingValidator {
+
+    private static final List<String> VALID_SERVICES =
+            Arrays.asList("WiFi", "Food", "Spa", "Laundry");
+
+    // Validate reservation ID
+    public void validateReservationId(String id) throws InvalidBookingException {
+        if (id == null || id.trim().isEmpty()) {
+            throw new InvalidBookingException("Reservation ID cannot be empty.");
+        }
+    }
+
+    // Validate service
+    public void validateService(String name, double cost) throws InvalidBookingException {
+
+        if (!VALID_SERVICES.contains(name)) {
+            throw new InvalidBookingException("Invalid service: " + name);
+        }
+
+        if (cost <= 0) {
+            throw new InvalidBookingException("Service cost must be positive.");
+        }
+    }
+}
+
 // -------------------- Service Class --------------------
 class Service {
     private String serviceName;
@@ -48,7 +81,7 @@ class AddOnServiceManager {
     }
 }
 
-// -------------------- Reservation Class (NEW) --------------------
+// -------------------- Reservation Class --------------------
 class Reservation {
     private String reservationId;
 
@@ -66,7 +99,7 @@ class Reservation {
     }
 }
 
-// -------------------- Booking History (NEW) --------------------
+// -------------------- Booking History --------------------
 class BookingHistory {
 
     private List<Reservation> history = new ArrayList<>();
@@ -80,7 +113,7 @@ class BookingHistory {
     }
 }
 
-// -------------------- Booking Report Service (NEW) --------------------
+// -------------------- Booking Report Service --------------------
 class BookingReportService {
 
     public void displayAllBookings(List<Reservation> reservations) {
@@ -112,63 +145,81 @@ public class BookMyStay {
         AddOnServiceManager manager = new AddOnServiceManager();
         BookingHistory history = new BookingHistory();
         BookingReportService reportService = new BookingReportService();
+        InvalidBookingValidator validator = new InvalidBookingValidator();
 
         System.out.println("===== Book My Stay - Add-On Services =====");
 
-        // Reservation ID input
-        System.out.print("Enter Reservation ID: ");
-        String reservationId = sc.nextLine();
+        try {
+            // Reservation ID input
+            System.out.print("Enter Reservation ID: ");
+            String reservationId = sc.nextLine();
 
-        // ✅ Add to booking history (NEW)
-        history.addReservation(new Reservation(reservationId));
+            // ✅ Validate reservation
+            validator.validateReservationId(reservationId);
 
-        List<Service> selectedServices = new ArrayList<>();
+            // Add to history
+            history.addReservation(new Reservation(reservationId));
 
-        // Number of services
-        System.out.print("Enter number of add-on services: ");
-        int n = sc.nextInt();
-        sc.nextLine();
+            List<Service> selectedServices = new ArrayList<>();
 
-        // Input services
-        for (int i = 0; i < n; i++) {
-            System.out.println("\nService " + (i + 1));
-
-            System.out.print("Enter service name: ");
-            String name = sc.nextLine();
-
-            System.out.print("Enter service cost: ");
-            double cost = sc.nextDouble();
+            // Number of services
+            System.out.print("Enter number of add-on services: ");
+            int n = sc.nextInt();
             sc.nextLine();
 
-            selectedServices.add(new Service(name, cost));
-        }
-
-        // Store services
-        manager.addServices(reservationId, selectedServices);
-
-        // Display services
-        System.out.println("\n===== Selected Services =====");
-        List<Service> services = manager.getServices(reservationId);
-
-        if (services.isEmpty()) {
-            System.out.println("No services selected.");
-        } else {
-            for (Service s : services) {
-                System.out.println("- " + s);
+            if (n < 0) {
+                throw new InvalidBookingException("Number of services cannot be negative.");
             }
+
+            // Input services
+            for (int i = 0; i < n; i++) {
+                System.out.println("\nService " + (i + 1));
+
+                System.out.print("Enter service name (WiFi/Food/Spa/Laundry): ");
+                String name = sc.nextLine();
+
+                System.out.print("Enter service cost: ");
+                double cost = sc.nextDouble();
+                sc.nextLine();
+
+                // ✅ Validate service
+                validator.validateService(name, cost);
+
+                selectedServices.add(new Service(name, cost));
+            }
+
+            // Store services
+            manager.addServices(reservationId, selectedServices);
+
+            // Display services
+            System.out.println("\n===== Selected Services =====");
+            List<Service> services = manager.getServices(reservationId);
+
+            if (services.isEmpty()) {
+                System.out.println("No services selected.");
+            } else {
+                for (Service s : services) {
+                    System.out.println("- " + s);
+                }
+            }
+
+            // Total cost
+            double total = manager.calculateTotalCost(reservationId);
+            System.out.println("\nTotal Add-On Cost: Rs." + total);
+
+        } catch (InvalidBookingException e) {
+            // ✅ Graceful failure
+            System.out.println("Error: " + e.getMessage());
+        } catch (Exception e) {
+            // Catch unexpected errors
+            System.out.println("Unexpected error occurred.");
         }
 
-        // Total cost
-        double total = manager.calculateTotalCost(reservationId);
-        System.out.println("\nTotal Add-On Cost: Rs." + total);
-
-        // ✅ Show booking history (NEW)
+        // System continues safely
         reportService.displayAllBookings(history.getAllReservations());
-
-        // ✅ Summary report (NEW)
         reportService.generateSummary(history.getAllReservations());
 
-        System.out.println("\n(Booking and room allocation remain unchanged)");
+        System.out.println("\n(System remains stable after errors)");
 
         sc.close();
     }
