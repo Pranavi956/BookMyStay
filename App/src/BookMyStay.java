@@ -1,4 +1,5 @@
 import java.util.*;
+import java.io.*;
 
 // -------------------- Custom Exception --------------------
 class InvalidBookingException extends Exception {
@@ -7,7 +8,7 @@ class InvalidBookingException extends Exception {
     }
 }
 
-// -------------------- Validator Class --------------------
+// -------------------- Validator --------------------
 class InvalidBookingValidator {
 
     private static final List<String> VALID_SERVICES =
@@ -29,8 +30,8 @@ class InvalidBookingValidator {
     }
 }
 
-// -------------------- Service Class --------------------
-class Service {
+// -------------------- Service --------------------
+class Service implements Serializable {
     private String serviceName;
     private double cost;
 
@@ -39,44 +40,17 @@ class Service {
         this.cost = cost;
     }
 
-    public String getServiceName() {
-        return serviceName;
-    }
-
     public double getCost() {
         return cost;
     }
 
-    @Override
     public String toString() {
         return serviceName + " (Rs." + cost + ")";
     }
 }
 
-// -------------------- Add-On Service Manager --------------------
-class AddOnServiceManager {
-
-    private Map<String, List<Service>> serviceMap = new HashMap<>();
-
-    public void addServices(String reservationId, List<Service> services) {
-        serviceMap.put(reservationId, services);
-    }
-
-    public List<Service> getServices(String reservationId) {
-        return serviceMap.getOrDefault(reservationId, new ArrayList<>());
-    }
-
-    public double calculateTotalCost(String reservationId) {
-        double total = 0;
-        for (Service s : getServices(reservationId)) {
-            total += s.getCost();
-        }
-        return total;
-    }
-}
-
-// -------------------- Reservation Class --------------------
-class Reservation {
+// -------------------- Reservation --------------------
+class Reservation implements Serializable {
     private String reservationId;
 
     public Reservation(String reservationId) {
@@ -87,52 +61,49 @@ class Reservation {
         return reservationId;
     }
 
-    @Override
     public String toString() {
         return "Reservation ID: " + reservationId;
     }
 }
 
 // -------------------- Booking History --------------------
-class BookingHistory {
+class BookingHistory implements Serializable {
 
     private List<Reservation> history = new ArrayList<>();
 
-    public synchronized void addReservation(Reservation reservation) {
-        history.add(reservation);
+    public synchronized void addReservation(Reservation r) {
+        history.add(r);
     }
 
     public synchronized List<Reservation> getAllReservations() {
         return new ArrayList<>(history);
     }
 
-    public synchronized boolean removeReservation(String reservationId) {
-        return history.removeIf(r -> r.getReservationId().equals(reservationId));
+    public synchronized boolean removeReservation(String id) {
+        return history.removeIf(r -> r.getReservationId().equals(id));
     }
 }
 
-// -------------------- Booking Report Service --------------------
+// -------------------- Report Service --------------------
 class BookingReportService {
-
-    public void displayAllBookings(List<Reservation> reservations) {
+    public void displayAllBookings(List<Reservation> list) {
         System.out.println("\n===== Booking History =====");
-        if (reservations.isEmpty()) {
+        if (list.isEmpty()) {
             System.out.println("No bookings found.");
             return;
         }
-        for (Reservation r : reservations) {
+        for (Reservation r : list) {
             System.out.println(r);
         }
     }
 
-    public void generateSummary(List<Reservation> reservations) {
-        System.out.println("\n===== Booking Summary =====");
-        System.out.println("Total Bookings: " + reservations.size());
+    public void generateSummary(List<Reservation> list) {
+        System.out.println("\nTotal Bookings: " + list.size());
     }
 }
 
 // -------------------- Cancellation Service --------------------
-class CancellationService {
+class CancellationService implements Serializable {
 
     private Stack<String> rollbackStack = new Stack<>();
     private Map<String, Integer> inventory = new HashMap<>();
@@ -141,99 +112,136 @@ class CancellationService {
         inventory.put("Standard", 5);
     }
 
-    public synchronized void cancelBooking(String reservationId, BookingHistory history)
+    public synchronized void cancelBooking(String id, BookingHistory history)
             throws InvalidBookingException {
 
         boolean exists = history.getAllReservations()
-                .stream()
-                .anyMatch(r -> r.getReservationId().equals(reservationId));
+                .stream().anyMatch(r -> r.getReservationId().equals(id));
 
-        if (!exists) {
-            throw new InvalidBookingException("Reservation does not exist.");
-        }
+        if (!exists) throw new InvalidBookingException("Reservation not found.");
 
-        rollbackStack.push(reservationId);
+        rollbackStack.push(id);
         inventory.put("Standard", inventory.get("Standard") + 1);
-        history.removeReservation(reservationId);
+        history.removeReservation(id);
 
-        System.out.println("Cancelled: " + reservationId);
+        System.out.println("Cancelled: " + id);
+    }
+
+    public Map<String, Integer> getInventory() {
+        return inventory;
+    }
+
+    public void setInventory(Map<String, Integer> inv) {
+        this.inventory = inv;
     }
 }
 
-// -------------------- Concurrent Booking Processor (NEW) --------------------
+// -------------------- Concurrent Booking --------------------
 class ConcurrentBookingProcessor {
 
-    private Queue<String> bookingQueue = new LinkedList<>();
-    private int availableRooms = 3; // shared resource
+    private Queue<String> queue = new LinkedList<>();
+    private int availableRooms = 3;
 
-    // Add booking request
-    public synchronized void addBookingRequest(String reservationId) {
-        bookingQueue.add(reservationId);
+    public synchronized void addBookingRequest(String id) {
+        queue.add(id);
     }
 
-    // Process booking safely
     public void processBookings(BookingHistory history) {
-
         while (true) {
-            String request;
+            String req;
 
             synchronized (this) {
-                if (bookingQueue.isEmpty()) break;
+                if (queue.isEmpty()) break;
 
-                request = bookingQueue.poll();
+                req = queue.poll();
 
                 if (availableRooms <= 0) {
-                    System.out.println("No rooms available for " + request);
+                    System.out.println("No rooms for " + req);
                     continue;
                 }
 
-                // CRITICAL SECTION
                 availableRooms--;
                 System.out.println(Thread.currentThread().getName() +
-                        " allocated room to " + request +
-                        " | Remaining: " + availableRooms);
+                        " booked " + req + " | Remaining: " + availableRooms);
             }
 
-            // outside synchronized → add to history
-            history.addReservation(new Reservation(request));
+            history.addReservation(new Reservation(req));
         }
     }
 }
 
-// -------------------- Main Class --------------------
+// -------------------- Persistence Service (NEW) --------------------
+class PersistenceService {
+
+    private static final String FILE_NAME = "booking_data.ser";
+
+    // Save state
+    public void save(BookingHistory history, Map<String, Integer> inventory) {
+        try (ObjectOutputStream oos =
+                     new ObjectOutputStream(new FileOutputStream(FILE_NAME))) {
+
+            oos.writeObject(history);
+            oos.writeObject(inventory);
+
+            System.out.println("\nData saved successfully.");
+
+        } catch (Exception e) {
+            System.out.println("Error saving data.");
+        }
+    }
+
+    // Load state
+    public Object[] load() {
+        try (ObjectInputStream ois =
+                     new ObjectInputStream(new FileInputStream(FILE_NAME))) {
+
+            BookingHistory history = (BookingHistory) ois.readObject();
+            Map<String, Integer> inventory =
+                    (Map<String, Integer>) ois.readObject();
+
+            System.out.println("Data loaded successfully.");
+
+            return new Object[]{history, inventory};
+
+        } catch (Exception e) {
+            System.out.println("No previous data found. Starting fresh.");
+            return null;
+        }
+    }
+}
+
+// -------------------- MAIN CLASS --------------------
 public class BookMyStay {
 
     public static void main(String[] args) {
 
         Scanner sc = new Scanner(System.in);
 
-        AddOnServiceManager manager = new AddOnServiceManager();
         BookingHistory history = new BookingHistory();
-        BookingReportService reportService = new BookingReportService();
-        InvalidBookingValidator validator = new InvalidBookingValidator();
-        CancellationService cancellationService = new CancellationService();
-
+        BookingReportService report = new BookingReportService();
+        CancellationService cancelService = new CancellationService();
+        PersistenceService persistence = new PersistenceService();
         ConcurrentBookingProcessor processor = new ConcurrentBookingProcessor();
 
-        System.out.println("===== Concurrent Booking Simulation =====");
+        // -------- LOAD PREVIOUS STATE --------
+        Object[] data = persistence.load();
+        if (data != null) {
+            history = (BookingHistory) data[0];
+            cancelService.setInventory((Map<String, Integer>) data[1]);
+        }
 
         try {
-            System.out.print("Enter number of concurrent requests: ");
+            System.out.print("Enter number of booking requests: ");
             int n = sc.nextInt();
             sc.nextLine();
 
-            // Add requests
             for (int i = 0; i < n; i++) {
                 System.out.print("Enter Reservation ID: ");
-                String id = sc.nextLine();
-                validator.validateReservationId(id);
-
-                processor.addBookingRequest(id);
+                processor.addBookingRequest(sc.nextLine());
             }
 
-            // Create threads
-            Thread t1 = new Thread(() -> processor.processBookings(history), "Thread-1");
-            Thread t2 = new Thread(() -> processor.processBookings(history), "Thread-2");
+            Thread t1 = new Thread(() -> processor.processBookings(history));
+            Thread t2 = new Thread(() -> processor.processBookings(history));
 
             t1.start();
             t2.start();
@@ -241,15 +249,25 @@ public class BookMyStay {
             t1.join();
             t2.join();
 
+            // -------- CANCEL OPTION --------
+            System.out.print("\nCancel any booking? (yes/no): ");
+            if (sc.nextLine().equalsIgnoreCase("yes")) {
+                System.out.print("Enter ID to cancel: ");
+                cancelService.cancelBooking(sc.nextLine(), history);
+            }
+
         } catch (Exception e) {
             System.out.println("Error: " + e.getMessage());
         }
 
-        // Final report
-        reportService.displayAllBookings(history.getAllReservations());
-        reportService.generateSummary(history.getAllReservations());
+        // -------- DISPLAY --------
+        report.displayAllBookings(history.getAllReservations());
+        report.generateSummary(history.getAllReservations());
 
-        System.out.println("\n(System remains consistent under concurrency)");
+        // -------- SAVE STATE --------
+        persistence.save(history, cancelService.getInventory());
+
+        System.out.println("\n(System recovered & persisted successfully)");
 
         sc.close();
     }
